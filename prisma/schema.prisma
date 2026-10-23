@@ -1,0 +1,237 @@
+// UNiCOM Console — canonical data model (WAVE-1 FROZEN).
+// Lane rules: this file is TL-owned. Workers do NOT edit it.
+// If a change is genuinely required, describe it in your COMPLETION REPORT;
+// the TL applies it centrally. All lanes code against this exact schema.
+// Conventions: money = integer cents (never floats). Platform-specific
+// payloads ride in Json columns. Display strings (humanized relative time)
+// are computed server-side at the API layer, never stored.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- identity (single-operator v1; NextAuth-ready) ----------
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------- stores & connections ----------
+
+model Store {
+  id         String       @id @default(cuid())
+  name       String
+  domain     String
+  platform   String // shopify | woocommerce | etsy | amazon | squarespace | bigcommerce
+  demo       Boolean      @default(false)
+  health     String       @default("syncing") // healthy | attention | syncing | error
+  status     String       @default("active") // active | paused | disconnected
+  lastSyncAt DateTime?
+  lastAuditAt DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  credential    Credential?
+  products      Product[]
+  orders        Order[]
+  syncRuns      SyncRun[]
+  missions      MissionStore[]
+  decisions     Decision[]
+  watchEvents   WatchEvent[]
+  skillInstalls SkillInstall[]
+}
+
+model Credential {
+  id         String   @id @default(cuid())
+  storeId    String   @unique
+  store      Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  method     String // oauth2 | key | token | demo
+  cipherText String // AES-256-GCM ciphertext, base64 — NEVER plaintext secrets
+  iv         String
+  authTag    String
+  meta       String? // JSON: { scopes, shop, endpoints, expiresAt, ... } — non-secret context
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// ---------- normalized catalog projections ----------
+
+model Product {
+  id              String   @id @default(cuid())
+  storeId         String
+  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  remoteId        String // platform-native id (e.g. Shopify product id)
+  handle          String?
+  title           String
+  status          String   @default("active")
+  priceCents      Int
+  compareAtCents  Int?
+  sku             String?
+  inventory       Int      @default(0)
+  imageUrl        String?
+  url             String?
+  raw             String? // JSON string of last raw platform payload
+  syncedAt        DateTime @default(now())
+
+  @@unique([storeId, remoteId])
+  @@index([storeId, status])
+}
+
+model Order {
+  id         String   @id @default(cuid())
+  storeId    String
+  store      Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  remoteId   String
+  number     String
+  status     String // open | fulfilled | refunded | cancelled
+  totalCents Int
+  currency   String   @default("USD")
+  buyerEmail String?
+  placedAt   DateTime
+  raw        String? // JSON string of last raw platform payload
+  syncedAt   DateTime @default(now())
+
+  @@unique([storeId, remoteId])
+  @@index([storeId, placedAt])
+}
+
+model SyncRun {
+  id         String    @id @default(cuid())
+  storeId    String
+  store      Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  kind       String // full | incremental | products | orders
+  status     String // running | done | failed
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  stats      String? // JSON: { products: n, orders: n, errors: [...] }
+  error      String?
+
+  @@index([storeId, startedAt])
+}
+
+// ---------- commander (chat agent) ----------
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  role      String // merchant | agent
+  text      String
+  plan      String? // JSON string[] — ordered plan steps
+  planDone  Int      @default(0)
+  evidence  String? // JSON string[] — evidence chips accumulated as steps land
+  agentMode String?  // "llm" | "offline" — honest marker of how the turn was produced
+  missionId String?
+  mission   Mission? @relation(fields: [missionId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// ---------- missions (multi-lane orchestrated work) ----------
+
+model Mission {
+  id         String        @id @default(cuid())
+  title      String
+  brief      String
+  status     String        @default("running") // running | in-review | awaiting-approval | done
+  eta        String?
+  startedAt  DateTime      @default(now())
+  finishedAt DateTime?
+  stores     MissionStore[]
+  lanes      MissionLane[]
+  messages   ChatMessage[]
+}
+
+model MissionStore {
+  missionId String
+  mission   Mission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@id([missionId, storeId])
+}
+
+model MissionLane {
+  id        String   @id @default(cuid())
+  missionId String
+  mission   Mission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  name      String
+  worker    String
+  status    String   @default("running") // running | in-review | done
+  progress  Int      @default(0) // 0-100
+  position  Int      @default(0)
+  evidence  String? // JSON string[]
+
+  @@index([missionId])
+}
+
+// ---------- decisions (the approval gate — nothing mutating runs without a verdict) ----------
+
+model Decision {
+  id             String    @id @default(cuid())
+  kind           String // price | listing | refund | campaign | other
+  title          String
+  storeId        String?
+  store          Store?    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  proposedBy     String // skill or agent name shown in the UI
+  risk           String // low | medium | high
+  impact         String?
+  evidence       String?   // JSON string[] — evidence chips
+  detail         String?   // JSON {label,value}[] — the review table
+  payload        String? // JSON: the write-op to execute ONLY on approve, e.g.
+  // { "op": "price_change", "remoteId": "8841", "priceCents": 7900 }
+  status         String    @default("open") // open | approved | declined | expired | executed | failed
+  expiresAt      DateTime?
+  resolvedAt     DateTime?
+  executionError String?
+  missionId      String?
+  createdAt      DateTime  @default(now())
+
+  @@index([status, expiresAt])
+}
+
+// ---------- watch ring & skills ----------
+
+model WatchEvent {
+  id        String   @id @default(cuid())
+  kind      String // heartbeat | anomaly | heal | review | dispatch
+  actor     String // skill/agent id shown in the UI
+  text      String
+  severity  String   @default("info") // info | warn | error
+  storeId   String?
+  store     Store?   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model Skill {
+  id         String   @id // slug, e.g. "price-sentinel"
+  name       String
+  glyph      String
+  tagline    String
+  watches    String
+  acts       String
+  risk       String // read-only | acts-with-approval | autonomous
+  events7d   Int      @default(0)
+  enabled    Boolean  @default(true)
+  installs   SkillInstall[]
+}
+
+model SkillInstall {
+  skillId     String
+  skill       Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  installedAt DateTime @default(now())
+
+  @@id([skillId, storeId])
+}
