@@ -24,6 +24,7 @@ The app distills zcode's proven interaction patterns into commerce:
 
 ```
 src/server/
+  display.ts                BASE (frozen) — humanization helpers (§3), used by all API layers
   crypto.ts                  C1  AES-256-GCM credential encryption
   connectors/
     types.ts                 BASE (frozen) — ConnectorAdapter interface + shared types
@@ -77,6 +78,7 @@ src/app/api/
   brief/route.ts             C3  GET morning brief
 
 tests/
+  display.test.ts            BASE (frozen) — canonical bun-test example
   connectors.test.ts         C1
   stores-api.test.ts         C1
   agent.test.ts              C2

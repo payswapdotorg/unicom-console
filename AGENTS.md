@@ -12,6 +12,10 @@ These laws are binding for all lanes (C1 connectors, C2 commander, C3 governance
 | `src/components/**` | Operator-approved UI. Zero changes. |
 | `src/app/page.tsx`, `src/app/layout.tsx`, `src/app/globals.css` | Operator-approved UI shell. |
 | `src/app/api/health/route.ts` | TL-owned liveness ping. |
+| `src/server/display.ts` | TL-owned humanization helpers (arch doc §3). Import them; don't reimplement. |
+| `src/server/connectors/types.ts` | Frozen connector interface (arch doc §2.1). |
+| `src/server/connectors/execute.ts` | Signature frozen; C1 owns the body (arch doc §2.3). |
+| `tests/display.test.ts` | Canonical test example; keep green. |
 
 If your feature seems to require a frozen-file change, that is a design smell — re-read `docs/BACKEND-ARCHITECTURE.md` and find the lane-clean path. If it genuinely can't work, document it in your report.
 
