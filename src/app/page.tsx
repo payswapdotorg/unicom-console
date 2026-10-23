@@ -38,10 +38,16 @@ const NAV: { id: Section; label: string; icon: typeof Radar }[] = [
 ];
 
 export default function Home() {
-  const { section, setSection, decisions, toastQueue, stores } = useProduct();
+  const { section, setSection, decisions, toastQueue, stores, hydrate } =
+    useProduct();
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
   const [connectOpen, setConnectOpen] = useState(false);
+
+  // live-backend hydration (no-op in mock mode; seeds remain the fallback)
+  useEffect(() => {
+    void hydrate();
+  }, [hydrate]);
 
   // drain the store's toast queue → shadcn toasts
   useEffect(() => {

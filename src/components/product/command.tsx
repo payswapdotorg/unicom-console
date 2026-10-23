@@ -19,7 +19,9 @@ import { MORNING_BRIEF, platformOf } from "@/lib/product/data";
 // Command — the day starts with the agent's brief (the morning report,
 // zcode-native). Numbers across all stores, overnight checks, what needs you.
 export function CommandSection() {
-  const { stores, decisions, missions, setSection } = useProduct();
+  const { stores, decisions, missions, setSection, brief: liveBrief } =
+    useProduct();
+  const MORNING = liveBrief ?? MORNING_BRIEF;
   const urgent = decisions.filter((d) => d.risk !== "low").length;
 
   return (
@@ -27,13 +29,13 @@ export function CommandSection() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Good morning.</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {MORNING_BRIEF.date} · the watch ran all night ·{" "}
+          {MORNING.date} · the watch ran all night ·{" "}
           {stores.length} stores connected
         </p>
       </header>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {MORNING_BRIEF.numbers.map((n, i) => (
+        {MORNING.numbers.map((n, i) => (
           <motion.div
             key={n.label}
             initial={{ opacity: 0, y: 8 }}
@@ -86,10 +88,10 @@ export function CommandSection() {
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm leading-relaxed text-foreground/90">
-                {MORNING_BRIEF.summary}
+                {MORNING.summary}
               </p>
               <ul className="space-y-2">
-                {MORNING_BRIEF.checks.map((c, i) => (
+                {MORNING.checks.map((c, i) => (
                   <motion.li
                     key={c}
                     initial={{ opacity: 0, x: -6 }}

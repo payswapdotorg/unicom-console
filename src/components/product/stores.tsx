@@ -225,8 +225,15 @@ export function ConnectDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
 }) {
-  const { connecting, startConnect, advanceConnect, finishConnect, cancelConnect } =
-    useProduct();
+  const {
+    connecting,
+    startConnect,
+    advanceConnect,
+    finishConnect,
+    cancelConnect,
+    submitConnect,
+    live,
+  } = useProduct();
   const [picked, setPicked] = useState<PlatformId | null>(null);
   const [name, setName] = useState("");
   const [domain, setDomain] = useState("");
@@ -237,20 +244,26 @@ export function ConnectDialog({
     if (connecting.step >= CONNECT_COPY.length) {
       const p = platformOf(connecting.platform as PlatformId);
       const t = setTimeout(() => {
-        finishConnect({
-          id: `store-${Date.now()}`,
-          name: name || `My ${p.name} store`,
-          domain: domain || `my-store.${p.id}.com`,
-          platform: p.id,
-          health: "syncing",
-          lastSync: "just now",
-          lastAudit: "queued",
-          products: 0,
-          orders7d: 0,
-          revenue7d: 0,
-          delta7d: 0,
-          apiUsage: 0,
-        });
+        if (live) {
+          // live mode: the backend creates the store (demo connector) and
+          // owns the record — including the fabricated initial catalog
+          void submitConnect(p.id, name, domain);
+        } else {
+          finishConnect({
+            id: `store-${Date.now()}`,
+            name: name || `My ${p.name} store`,
+            domain: domain || `my-store.${p.id}.com`,
+            platform: p.id,
+            health: "syncing",
+            lastSync: "just now",
+            lastAudit: "queued",
+            products: 0,
+            orders7d: 0,
+            revenue7d: 0,
+            delta7d: 0,
+            apiUsage: 0,
+          });
+        }
         setPicked(null);
         setName("");
         setDomain("");
@@ -259,7 +272,7 @@ export function ConnectDialog({
     }
     const t = setTimeout(advanceConnect, 900);
     return () => clearTimeout(t);
-  }, [connecting, advanceConnect, finishConnect, name, domain]);
+  }, [connecting, advanceConnect, finishConnect, submitConnect, live, name, domain]);
 
   return (
     <Dialog

@@ -12,7 +12,7 @@ import { useProduct } from "@/lib/product/store";
 // acts across every connected store, and reports evidence inline.
 // Risky steps become decisions on the frontier, never silent actions.
 export function ChatSection() {
-  const { chat, chatThinking, sendChat, tickPlan } = useProduct();
+  const { chat, chatThinking, sendChat, tickPlan, pollChat, live } = useProduct();
   const [draft, setDraft] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -23,14 +23,21 @@ export function ChatSection() {
     });
   }, [chat, chatThinking]);
 
-  // tick the newest agent plan forward
+  // advance the newest agent plan: live mode polls the backend's paced
+  // reveal; mock mode ticks locally (the approved animation)
   useEffect(() => {
     const last = chat[chat.length - 1];
     if (!last?.plan || last.role !== "agent") return;
     if ((last.planDone ?? 0) >= last.plan.length) return;
-    const t = setTimeout(() => tickPlan(last.id), 900);
+    const t = setTimeout(
+      () => {
+        if (live) void pollChat(last.id);
+        else tickPlan(last.id);
+      },
+      live ? 1200 : 900,
+    );
     return () => clearTimeout(t);
-  }, [chat, tickPlan]);
+  }, [chat, live, pollChat, tickPlan]);
 
   const submit = (e?: React.FormEvent) => {
     e?.preventDefault();

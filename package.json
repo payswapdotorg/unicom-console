@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "vercel:build": "bash scripts/vercel-build.sh",
     "db:push": "prisma db push --accept-data-loss",
     "db:generate": "prisma generate"
   },
